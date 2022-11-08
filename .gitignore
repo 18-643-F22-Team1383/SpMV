@@ -1,0 +1,12 @@
+*
+!*/
+!.gitignore
+!*.cpp
+!*.h
+!*.py
+!Makefile
+.metadata
+SpMV/.gitignore
+SpMV_kernels/.gitignore
+*/Hardware
+cnn_sw
