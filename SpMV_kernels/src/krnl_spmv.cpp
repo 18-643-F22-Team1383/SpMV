@@ -41,7 +41,7 @@ extern "C"
  * @summary: fast stream SpMV kernel
  */
 void krnl_spmv_fast(const data_t *values, const data_t *col_index, const data_t *rowPtr,
-                    const data_t *x, data_t *y, uint64_t batch_size)
+                    const data_t *x, data_t *y, uint64_t batch_size = 10)
 {
 
 // initialize the fifos and data stream
@@ -302,8 +302,81 @@ void krnl_spmv_reduced(const data_t *values, const data_t *col_index, const data
  *          y: output vector, len(y) = n
  *          NNZ: non-zero elements of input sparse matrix, also is the size of input values[]
  *          NN: num of rows of input sparse matrix. NN = n
- * @summary: reduced port stream SpMV kernel
+ * @summary: fast stream SpMV kernel
  */
-// void krnl_spmv_multiport(const data_t *values, const data_t *col_index, const data_t *rowPtr, const data_t *row_length const data_t *x, data_t *y, const data_t NNZ, const data_t NN)
-// {
-// }
+#ifdef __VITIS_CL__
+extern "C"
+{
+#endif
+  void krnl_spmv_fast_V2(const data_t *values, const data_t *col_index, const data_t *rowPtr,
+                         const data_t *x, data_t *y, uint64_t batch_size = 10)
+  {
+
+    // initialize the fifos and data stream
+    data_t rows_fifo[NN];
+    data_t values_fifo[NNZ];
+    data_t cols_fifo[NNZ];
+    data_t results_fifo[NN];
+
+    // batch_size iteration
+    for (uint64_t iter = 0; iter < batch_size; iter++)
+    {
+      for (index_t i = 0; i < NN; i++)
+      {
+#pragma HLS pipeline
+        rows_fifo[i] = ARRAY2(rowPtr, iter, i + 1, NN + 1) - ARRAY2(rowPtr, iter, i, NN + 1);
+      }
+      // feed column index and values into fifo
+      for (index_t i = 0; i < NNZ; i++)
+      {
+#pragma HLS pipeline
+        values_fifo[i] = ARRAY2(values, iter, i, NNZ);
+        cols_fifo[i] = ARRAY2(col_index, iter, i, NNZ);
+      }
+
+      /**
+       *  initialize the read parameters
+       */
+      data_t col_left = 0;
+      data_t accumulator = 0;
+      data_t resultIdx = 0;
+      data_t rowsIdx = 0;
+      data_t value;
+      data_t col;
+
+      // read from fifo -> apply multiplication -> store value in local buffer -> write back
+      for (index_t i = 0; i < NNZ; i++)
+      {
+#pragma HLS pipeline
+        // read parameters from fifos
+        if (col_left == 0)
+        {
+          col_left = rows_fifo[rowsIdx];
+          accumulator = 0;
+          rowsIdx++;
+        }
+        // multiply and accumulate
+
+        value = values_fifo[i];
+        col = cols_fifo[i];
+        accumulator += value * ARRAY2(x, iter, col, MM);
+
+        col_left--;
+        // write back the dot product to fifo
+        if (col_left == 0)
+        {
+          results_fifo[resultIdx] = accumulator;
+          resultIdx++;
+        }
+      }
+      // write back the accumulation to y vector
+      for (index_t i = 0; i < NN; i++)
+      {
+#pragma HLS pipeline
+        ARRAY2(y, iter, i, NN) = results_fifo[i];
+      }
+    }
+  }
+#ifdef __VITIS_CL__ // for lab 3
+} // extern
+#endif

@@ -3,6 +3,7 @@
 
 int main(int argc, char *argv[])
 {
+#ifdef __VITIS_CL__
   if (argc != 4)
   {
     std::cout << "Provide binary in argv[1], batch size in argv[2] & whether to verify in argv[3] (1 or 0)\n";
@@ -11,7 +12,10 @@ int main(int argc, char *argv[])
   std::string binary_file = argv[1];
   uint64_t batch_size = atoi(argv[2]);
   uint64_t enable_verify = atoi(argv[3]);
-
+#else
+  uint64_t batch_size = 10;
+  uint64_t enable_verify = 1;
+#endif
   struct timeval start_time, end_time;
   bool mismatch = false;
 
@@ -86,8 +90,8 @@ int main(int argc, char *argv[])
 #ifdef __VITIS_CL__
   spmv_run_kernel(cl_obj, spmv_obj, batch_size);
 #else
-  // krnl_spmv(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
-  krnl_spmv_fast(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  //krnl_spmv(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  krnl_spmv_fast_V2(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
 #endif
 
   gettimeofday(&end_time, NULL);
