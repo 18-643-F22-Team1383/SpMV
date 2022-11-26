@@ -46,25 +46,18 @@ void krnl_spmv_fast(const data_t *values, const data_t *col_index, const data_t 
 
 // initialize the fifos and data stream
 #pragma HLS DATAFLOW
-  const data_t fifo_depth = NNZ;
   // defines all the fifos
   hls::stream<data_t> rows_fifo;
-#pragma HLS STREAM variable = rows_fifo depth = fifo_depth type = fifo
+#pragma HLS STREAM variable = rows_fifo depth = NN type = fifo
 
   hls::stream<data_t> values_fifo;
-#pragma HLS STREAM variable = values_fifo depth = fifo_depth type = fifo
+#pragma HLS STREAM variable = values_fifo depth = NNZ type = fifo
 
   hls::stream<data_t> cols_fifo;
-#pragma HLS STREAM variable = cols_fifo depth = fifo_depth type = fifo
+#pragma HLS STREAM variable = cols_fifo depth = NNZ type = fifo
 
   hls::stream<data_t> results_fifo;
-#pragma HLS STREAM variable = results_fifo depth = fifo_depth type = fifo
-
-  hls::stream<data_t> data_length_fifo;
-#pragma HLS STREAM variable = data_length_fifo depth = fifo_depth type = fifo
-
-  hls::stream<data_t> row_index_fifo;
-#pragma HLS STREAM variable = row_index_fifo depth = fifo_depth type = fifo
+#pragma HLS STREAM variable = results_fifo depth = NN type = fifo
 
   // batch_size iteration
   for (uint64_t iter = 0; iter < batch_size; iter++)
@@ -83,17 +76,15 @@ void krnl_spmv_fast(const data_t *values, const data_t *col_index, const data_t 
     for (index_t i = 0; i < NN; i++)
     {
 #pragma HLS pipeline
-      data_t row_size = row_length[i];
-      rows_fifo << row_size;
+      rows_fifo << row_length[i];
     }
 
     // feed column index and values into fifo
     for (index_t i = 0; i < NNZ; i++)
     {
 #pragma HLS pipeline
-      values_fifo << ARRAY2(values, iter, 1, NNZ);
-      data_t col = ARRAY2(col_index, iter, i, NNZ);
-      cols_fifo << col;
+      values_fifo << ARRAY2(values, iter, i, NNZ);
+      cols_fifo << ARRAY2(col_index, iter, i, NNZ);
     }
 
     /**

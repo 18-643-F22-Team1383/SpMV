@@ -91,7 +91,8 @@ int main(int argc, char *argv[])
   spmv_run_kernel(cl_obj, spmv_obj, batch_size);
 #else
   //krnl_spmv(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
-  krnl_spmv_fast_V2(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  //krnl_spmv_fast_V2(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  krnl_spmv_fast(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
 #endif
 
   gettimeofday(&end_time, NULL);

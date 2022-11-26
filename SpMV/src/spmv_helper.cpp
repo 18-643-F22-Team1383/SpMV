@@ -55,7 +55,7 @@ bool verify(data_t *ref, data_t *checkit, uint64_t iter)
       printf("\n***Result does not match reference: "
              "iter = %lu, refval = %u, checkval = %u***\n",
              iter, refval, checkval);
-      // return 0;
+      return 0;
     }
   }
   return 1;
