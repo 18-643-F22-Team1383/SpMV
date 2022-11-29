@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
   bool mismatch = false;
 
   data_t *ptr_values, *ptr_colIdx, *ptr_rowPtr, *ptr_x, *ptr_y;
+  data_t *ptr_indices;
   data_t *ref_values, *ref_colIdx, *ref_rowPtr, *ref_x, *ref_y;
 
   // Compute the size of array in bytes
@@ -28,6 +29,7 @@ int main(int argc, char *argv[])
   uint64_t num_rowPtr = batch_size * (NN + 1);
   uint64_t num_x = batch_size * MM;
   uint64_t num_y = batch_size * NN;
+  uint64_t num_indices = batch_size * (NNZ + NN);
 
   cl_object cl_obj;
 
@@ -59,6 +61,8 @@ int main(int argc, char *argv[])
                         num_x * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_y, buf_idx++,
                         num_y * sizeof(data_t));
+  allocate_readonly_mem(cl_obj, (void **)&ptr_indices, buf_idx++,
+                        num_indices * sizeof(data_t));
 
   MALLOC_CHECK(ref_values = new data_t[num_values]);
   MALLOC_CHECK(ref_colIdx = new data_t[num_colIdx]);
@@ -70,6 +74,25 @@ int main(int argc, char *argv[])
   initialize_sparse_matrix(ref_rowPtr, ref_colIdx, batch_size);
   initialize_buffer(ref_values, num_values, true);
   initialize_buffer(ref_x, num_x, true);
+
+  int col_left = 0;
+  int row_index = 0;
+  int col_index = 0;
+  for (int i = 0; i < num_indices; i++)
+  {
+    if (col_left = 0)
+    {
+      col_left = ref_rowPtr[row_index];
+      ptr_indices[i] = col_left;
+      row_index++;
+    }
+    else
+    {
+      ptr_indices[i] = ref_colIdx[col_index];
+      col_index++;
+      col_left--;
+    }
+  }
 
   // copy ref copy to kernel use copy, converting to kernel expected layout
   for (uint32_t i = 0; i < num_values; i++)
@@ -92,7 +115,8 @@ int main(int argc, char *argv[])
 #else
   // krnl_spmv(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
   // krnl_spmv_fast_V2(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
-  krnl_spmv_fast(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  // krnl_spmv_fast(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  krnl_spmv_reduced(ptr_values, ptr_indices, ptr_x, ptr_y, batch_size);
 #endif
 
   gettimeofday(&end_time, NULL);
