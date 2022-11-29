@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
   {
     if (col_left = 0)
     {
-      col_left = ref_rowPtr[row_index];
+      col_left = ref_rowPtr[row_index + 1] - ref_rowPtr[row_index];
       ptr_indices[i] = col_left;
       row_index++;
     }
