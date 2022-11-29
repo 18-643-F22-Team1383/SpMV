@@ -75,19 +75,27 @@ int main(int argc, char *argv[])
   initialize_buffer(ref_values, num_values, true);
   initialize_buffer(ref_x, num_x, true);
 
-  int col_left = 0;
-  int row_index = 0;
-  int col_index = 0;
-  for (int i = 0; i < num_indices; i++)
+  uint32_t col_left = 0;
+  uint32_t row_index = 0;
+  uint32_t row_batch = 0;
+  uint32_t col_index = 0;
+  for (uint32_t i = 0; i < num_indices; i++)
   {
-    if (col_left = 0)
+    if (col_left == 0)
     {
-      col_left = ref_rowPtr[row_index + 1] - ref_rowPtr[row_index];
+      col_left = ref_rowPtr[(NN + 1) * row_batch + row_index + 1] - ref_rowPtr[(NN + 1) * row_batch + row_index];
+      // printf("Indices %d: row index: %d\n", i, col_left);
       ptr_indices[i] = col_left;
       row_index++;
+      if (row_index == NN)
+      {
+        row_index = 0;
+        row_batch++;
+      }
     }
     else
     {
+      // printf("Indices %d: col index: %d\n", i, ref_colIdx[col_index]);
       ptr_indices[i] = ref_colIdx[col_index];
       col_index++;
       col_left--;

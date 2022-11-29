@@ -122,20 +122,28 @@ extern "C"
       {
         col_left = rows_fifo.read();
         accumulator = 0;
-        for (index_t j = 0; j < col_left; j++)
+        for (index_t j = 0; j < col_left + 1; j++)
         {
-          // multiply and accumulate
-          value = values_fifo.read();
-          col = cols_fifo.read();
-          accumulator += value * ARRAY2(x, iter, col, MM);
+          if (j == 0)
+            continue;
+          else
+          {
+            // multiply and accumulate
+            value = values_fifo.read();
+            col = cols_fifo.read();
+            accumulator += value * ARRAY2(x, iter, col, MM);
+          }
         }
         results_fifo << accumulator;
       }
       // write back the accumulation to y vector
-      for (index_t i = 0; i < NN; i++)
+      for (index_t i = 0; i < NN + 1; i++)
       {
 #pragma HLS pipeline
-        ARRAY2(y, iter, i, NN) = results_fifo.read();
+        if (i == 0)
+          continue;
+        else
+          ARRAY2(y, iter, i - 1, NN) = results_fifo.read();
       }
     }
   }
@@ -234,34 +242,34 @@ extern "C"
         }
         results_fifo << accumulator;
       }
-//       for (index_t i = 0; i < NNZ; i++)
-//       {
-// #pragma HLS pipeline
-//         // read parameters from fifos
-//         if (i == 0 || col_left == 0)
-//         {
-//           col_left = rows_fifo.read();
-//           accumulator = 0;
-//         }
-//         if (col_left != 0)
-//         {
-//           // multiply and accumulate
-//           value = values_fifo.read();
-//           col = cols_fifo.read();
-//           accumulator += value * ARRAY2(x, iter, col, MM);
+      //       for (index_t i = 0; i < NNZ; i++)
+      //       {
+      // #pragma HLS pipeline
+      //         // read parameters from fifos
+      //         if (i == 0 || col_left == 0)
+      //         {
+      //           col_left = rows_fifo.read();
+      //           accumulator = 0;
+      //         }
+      //         if (col_left != 0)
+      //         {
+      //           // multiply and accumulate
+      //           value = values_fifo.read();
+      //           col = cols_fifo.read();
+      //           accumulator += value * ARRAY2(x, iter, col, MM);
 
-//           col_left--;
-//         }
-//         else
-//         {
-//           i--;
-//         }
-//         // write back the dot product to fifo
-//         if (col_left == 0)
-//         {
-//           results_fifo << accumulator;
-//         }
-//       }
+      //           col_left--;
+      //         }
+      //         else
+      //         {
+      //           i--;
+      //         }
+      //         // write back the dot product to fifo
+      //         if (col_left == 0)
+      //         {
+      //           results_fifo << accumulator;
+      //         }
+      //       }
       // write back the accumulation to y vector
       for (index_t i = 0; i < NN; i++)
       {
