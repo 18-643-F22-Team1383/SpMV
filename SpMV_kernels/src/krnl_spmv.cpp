@@ -91,11 +91,11 @@ extern "C"
         if (idx_col_left == 0)
         {
           idx_col_left = indices;
-          row_fifo << idx_col_left;
+          rows_fifo << idx_col_left;
         }
         else
         {
-          col_fifo << indices;
+          cols_fifo << indices;
           idx_col_left--;
         }
       }
