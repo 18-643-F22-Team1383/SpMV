@@ -81,22 +81,22 @@ extern "C"
 #pragma HLS pipeline
         indices_fifo << ARRAY2(indices, iter, i, NNZ + NN);
       }
-      data_t col_left = 0;
+      data_t idx_col_left = 0;
       // feed data into the fifos
       // feed row index into fifo
       for (index_t i = 0; i < NNZ + NN; i++)
       {
 #pragma HLS PIPELINE
         data_t indices = indices_fifo.read();
-        if (col_left == 0)
+        if (idx_col_left == 0)
         {
-          col_left = indices;
-          row_fifo << col_left;
+          idx_col_left = indices;
+          row_fifo << idx_col_left;
         }
         else
         {
           col_fifo << indices;
-          col_left--;
+          idx_col_left--;
         }
       }
 
