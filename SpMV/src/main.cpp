@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
 
   krnl_object spmv_obj;
   spmv_obj.index = 0;
-  spmv_obj.name = "krnl_spmv";
+  spmv_obj.name = "krnl_spmv_fast";
 
 #ifdef __VITIS_CL__
   std::cout << "===== Initialize device ======" << std::endl;
@@ -90,8 +90,8 @@ int main(int argc, char *argv[])
 #ifdef __VITIS_CL__
   spmv_run_kernel(cl_obj, spmv_obj, batch_size);
 #else
-  //krnl_spmv(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
-  //krnl_spmv_fast_V2(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  // krnl_spmv(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
+  // krnl_spmv_fast_V2(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
   krnl_spmv_fast(ptr_values, ptr_colIdx, ptr_rowPtr, ptr_x, ptr_y, batch_size);
 #endif
 
