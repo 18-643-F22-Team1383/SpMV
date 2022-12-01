@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 
   krnl_object spmv_obj;
   spmv_obj.index = 0;
-  spmv_obj.name = "krnl_spmv_fast";
+  spmv_obj.name = "krnl_spmv_reduced";
 
 #ifdef __VITIS_CL__
   std::cout << "===== Initialize device ======" << std::endl;
@@ -51,18 +51,29 @@ int main(int argc, char *argv[])
 
   std::cout << "\n===== Allocating buffers ======" << std::endl;
   uint64_t buf_idx = 0;
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_values, buf_idx++,
+  //                       num_values * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_colIdx, buf_idx++,
+  //                       num_colIdx * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_rowPtr, buf_idx++,
+  //                       num_rowPtr * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_x, buf_idx++,
+  //                       num_x * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_y, buf_idx++,
+  //                       num_y * sizeof(data_t));
+
   allocate_readonly_mem(cl_obj, (void **)&ptr_values, buf_idx++,
                         num_values * sizeof(data_t));
-  allocate_readonly_mem(cl_obj, (void **)&ptr_colIdx, buf_idx++,
-                        num_colIdx * sizeof(data_t));
-  allocate_readonly_mem(cl_obj, (void **)&ptr_rowPtr, buf_idx++,
-                        num_rowPtr * sizeof(data_t));
+  allocate_readonly_mem(cl_obj, (void **)&ptr_indices, buf_idx++,
+                        num_indices * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_x, buf_idx++,
                         num_x * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_y, buf_idx++,
                         num_y * sizeof(data_t));
-  allocate_readonly_mem(cl_obj, (void **)&ptr_indices, buf_idx++,
-                        num_indices * sizeof(data_t));
+  allocate_readonly_mem(cl_obj, (void **)&ptr_colIdx, buf_idx++,
+                        num_colIdx * sizeof(data_t));
+  allocate_readonly_mem(cl_obj, (void **)&ptr_rowPtr, buf_idx++,
+                        num_rowPtr * sizeof(data_t));
 
   MALLOC_CHECK(ref_values = new data_t[num_values]);
   MALLOC_CHECK(ref_colIdx = new data_t[num_colIdx]);
