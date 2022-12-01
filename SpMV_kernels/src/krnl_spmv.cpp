@@ -88,29 +88,28 @@ extern "C"
         values_fifo << ARRAY2(values, iter, i, NNZ);
       }
 
-      data_t idx_col_left = 0;
+      data_t col_left = 0;
       // feed data into the fifos
       // feed row index into fifo
       for (index_t i = 0; i < NNZ + NN; i++)
       {
 #pragma HLS PIPELINE
         data_t idx = indices_fifo.read();
-        if (idx_col_left == 0)
+        if (col_left == 0)
         {
-          idx_col_left = idx;
-          rows_fifo << idx_col_left;
+          col_left = idx;
+          rows_fifo << col_left;
         }
         else
         {
           cols_fifo << idx;
-          idx_col_left--;
+          col_left--;
         }
       }
 
       /**
        *  initialize the read parameters
        */
-      data_t col_left;
       data_t accumulator;
       data_t value;
       data_t col;
