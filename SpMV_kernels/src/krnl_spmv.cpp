@@ -1,7 +1,7 @@
 #include "krnl_spmv.h"
 #include <ap_int.h>
 #include <hls_stream.h>
-
+#include <stdio.h>
 void krnl_spmv(const data_t *values, const data_t *colIdx, const data_t *rowPtr,
                const data_t *x, data_t *y, uint64_t batch_size)
 {
@@ -20,7 +20,6 @@ void krnl_spmv(const data_t *values, const data_t *colIdx, const data_t *rowPtr,
     }
   }
 }
-
 /**
  * @default: sparse matrix has (n) rows and (m) columns totoally (NNZ) non-zero elements
  * @param:  valeus: all the non-zero values extracted from input sparse matrix
@@ -33,145 +32,101 @@ void krnl_spmv(const data_t *values, const data_t *colIdx, const data_t *rowPtr,
  *          NN: num of rows of input sparse matrix. NN = n
  * @summary: reduced port stream SpMV kernel
  */
-void krnl_spmv_reduced(const data_t *values, const data_t *col_index, const data_t *rowPtr,
-                       const data_t *x, data_t *y, uint64_t batch_size)
+#ifdef __VITIS_CL__
+extern "C"
 {
+#endif
+  void krnl_spmv_reduced(const data_t *values, const data_t *indices,
+                          const data_t *x, data_t *y, uint64_t batch_size){
 
-  for (uint64_t iter = 0; iter < batch_size; iter++)
-  {
-    // initialize row_length vector
-    data_t row_length[NN];
-    for (index_t i = 0; i < NN; i++)
+    for (uint64_t iter = 0; iter < batch_size; iter++)
     {
-#pragma HLS pipeline
-      row_length[i] = ARRAY2(rowPtr, iter, i + 1, NN + 1) - ARRAY2(rowPtr, iter, i, NN + 1);
-    }
+    // initializa parameters and corresponding fifos
+    const data_t indices_fifo_depth = NNZ + NN;
+    const data_t rows_fifo_depth = NN;
+    const data_t values_fifo_depth = NNZ;
+    const data_t col_fifo_depth = NN;
 
-    data_t indiciePtr = 0;
-    /**
-     * Initialize the indices fifo and value fifo
-     */
-    const data_t fifo_depth = NNZ;
 
     hls::stream<data_t> indices_fifo;
-#pragma HLS STREAM variable = indices_fifo depth = fifo_depth type = fifo
+  #pragma HLS STREAM variable = indices_fifo depth = indices_fifo_depth type = fifo
 
     hls::stream<data_t> values_fifo;
-#pragma HLS STREAM variable = values_fifo depth = fifo_depth type = fifo
+  #pragma HLS STREAM variable = values_fifo depth = values_fifo_depth type = fifo
 
     hls::stream<data_t> row_fifo;
-#pragma HLS STREAM variable = row_fifo depth = fifo_depth type = fifo
-
-    hls::stream<data_t> col_fifo;
-#pragma HLS STREAM variable = col_fifo depth = fifo_depth type = fifo
-
-    hls::stream<data_t> values_indices_fifo;
-#pragma HLS STREAM variable = values_indices_fifo depth = fifo_depth type = fifo
+  #pragma HLS STREAM variable = row_fifo depth = rows_fifo_depth type = fifo
 
     hls::stream<data_t> results_fifo;
-#pragma HLS STREAM variable = results_fifo depth = fifo_depth type = fifo
+  #pragma HLS STREAM variable = results_fifo depth = rows_fifo_depth type = fifo
 
-    data_t sum;
-    const data_t II = 1;
-    data_t value;
-    data_t term[II];
-    data_t col;
+    hls::stream<data_t> col_fifo;
+  #pragma HLS STREAM variable = col_fifo depth = col_fifo_depth type = fifo
 
-    // initialize the indice array
-    data_t compact_size = NN + NNZ;
-    data_t indices[compact_size];
-    for (index_t i = 0; i < NN; i++)
+
+  // feed indice fifo
+    for (index_t i = 0; i < NNZ + NN; i++)
     {
-      // fill the row_length element into indeices
-      data_t numElment = row_length[i];
-      data_t colLowerBound = rowPtr[i];
-      data_t colUpperBound = rowPtr[i + 1];
-      indices[indiciePtr] = numElment;
-      // move indices ptr 1 unit right
-      indiciePtr++;
-      for (index_t k = colLowerBound; k < colUpperBound; k++, indiciePtr++)
-      {
-        indices[indiciePtr] = ARRAY2(col_index, iter, k, NNZ);
-      }
+      #pragma HLS pipeline
+        indices_fifo <<  ARRAY2(indices, iter, i, NNZ + NN);
     }
-
-    // feed the indices
-    for (index_t i = 0; i < compact_size; i++)
-    {
-#pragma HLS pipeline
-      indices_fifo << indices[i];
-    }
-    // feed values
+  // feed values fifo
+    data_t idx_col_left = 0;
     for (index_t i = 0; i < NNZ; i++)
     {
-#pragma HLS pipeline
-      values_fifo << ARRAY2(values, iter, i, NNZ);
+      #pragma HLS pipeline
+        values_fifo << ARRAY2(values,iter,i,NNZ);
     }
-
-    data_t col_left = 0;
-    // feed indices
-    for (index_t i = 0; i < compact_size; i++)
+  
+  // read indice fifo assign colIndx or colLeft
+    for (index_t i = 0; i < NNZ+NN; i++)
     {
-#pragma HLS pipeline
-      data_t indices = indices_fifo.read();
-      if (col_left == 0)
-      {
-        // initially the first element in indices fifo
-        col_left = indices;
-        row_fifo << col_left;
-      }
-      else
-      {
-        col_fifo << indices;
-        col_left--;
+      #pragma HLS pipeline
+      data_t idx = indices_fifo.read();
+      // last row is calculated or kernel just started 
+      if(idx_col_left == 0){
+        idx_col_left = idx;
+        row_fifo << idx_col_left;
+      }else{
+      // current indice is the col index
+        col_fifo << idx;
+        idx_col_left -- ;
       }
     }
-
-    // reset the col_left
-    col_left = 0;
-    for (index_t k = 0; k < NNZ + NN * II; k += II)
-    {
-#pragma HLS pipeline
-      if (col_left == 0)
-      {
-        col_left = row_fifo.read();
-        sum = 0;
-      }
-      else
-      {
-        for (index_t i = 0; i < II; i++)
-        {
-
-          // multiply
+    
+  // accumulate and reduce statge
+  data_t accumulator = 0;
+  data_t value = 0;
+  data_t col;
+  for (index_t i = 0; i < NNZ+NN; i++)
+  {
+    #pragma HLS pipeline
+    // first computation or row compute finished
+    if(i == 0 || idx_col_left == 0){
+      idx_col_left = row_fifo.read();
+      accumulator =0;
+    }else{
+      for(index_t i = 0; i < idx_col_left; i ++){
+      #pragma HLS pipeline
           value = values_fifo.read();
           col = col_fifo.read();
-          term[i] = value * ARRAY2(x, iter, col, MM);
-        }
-
-        data_t sum_tmp = 0;
-        for (index_t i = 0; i < II; i += II)
-        {
-          sum_tmp += term[i];
-        }
-        sum += sum_tmp;
-        col_left -= II;
-
-        if (col_left == 0)
-        {
-          results_fifo << sum;
-        }
+          accumulator += value * ARRAY2(x, iter, col, MM);
       }
-    }
-
-    // write back  accumulator to y vector
-    for (index_t i = 0; i < NN; i++)
-    {
-#pragma HLS pipeline
-      ARRAY2(y, iter, i, NN) = results_fifo.read();
+      results_fifo << accumulator;
     }
   }
-}
 
+// write back to the Y vector
+  for (index_t i = 0; i < NN; i++)
+  {
+    #pragma HLS pipeline
+    ARRAY2(y, iter, i, NN) = results_fifo.read();
+  }
+  
+    }
+    
+  } 
+  
 /**
  * @default: sparse matrix has (n) rows and (m) columns totoally (NNZ) non-zero elements
  * @param:  valeus: all the non-zero values extracted from input sparse matrix
@@ -184,110 +139,115 @@ void krnl_spmv_reduced(const data_t *values, const data_t *col_index, const data
  *          NN: num of rows of input sparse matrix. NN = n
  * @summary: fast stream SpMV kernel
  */
-#ifdef __VITIS_CL__
-extern "C"
-{
-#endif
   void krnl_spmv_fast(const data_t *values, const data_t *col_index, const data_t *rowPtr,
-                      const data_t *x, data_t *y, uint64_t batch_size = 10)
-  {
-
-// initialize the fifos and data stream
-#pragma HLS DATAFLOW
-    const data_t row_length_fifo_depth = 2;
-    const data_t values_fifo_depth = 2;
-    const data_t cols_fifo_depth = 2;
-    const data_t results_fifo_depth = 2;
-    // defines all the fifos
-    hls::stream<data_t> row_length_fifo;
-#pragma HLS STREAM variable = row_length_fifo depth = row_length_fifo_depth type = fifo
-
-    hls::stream<data_t> values_fifo;
-#pragma HLS STREAM variable = values_fifo depth = values_fifo_depth type = fifo
-
-    hls::stream<data_t> cols_fifo;
-#pragma HLS STREAM variable = cols_fifo depth = cols_fifo_depth type = fifo
-
-    hls::stream<data_t> results_fifo;
-#pragma HLS STREAM variable = results_fifo depth = results_fifo_depth type = fifo
-
-    // batch_size iteration
-batch_loop:
-    for (uint64_t iter = 0; iter < batch_size; iter++)
+                        const data_t *x, data_t *y, uint64_t batch_size = 10)
     {
 
-      // initialize row_length vector
+  // initialize the fifos and data stream
+  #pragma HLS DATAFLOW
+      const data_t row_length_fifo_depth = NN;
+      const data_t values_fifo_depth = NN;
+      const data_t cols_fifo_depth = NN;
+      const data_t results_fifo_depth = NN;
+      // defines all the fifos
+      hls::stream<data_t> row_length_fifo;
+  #pragma HLS STREAM variable = row_length_fifo depth = row_length_fifo_depth type = fifo
+
+      hls::stream<data_t> values_fifo;
+  #pragma HLS STREAM variable = values_fifo depth = values_fifo_depth type = fifo
+
+      hls::stream<data_t> cols_fifo;
+  #pragma HLS STREAM variable = cols_fifo depth = cols_fifo_depth type = fifo
+
+      hls::stream<data_t> results_fifo;
+  #pragma HLS STREAM variable = results_fifo depth = results_fifo_depth type = fifo
+
+      // batch_size iteration
+  batch_loop:
+      for (uint64_t iter = 0; iter < batch_size; iter++)
+      {
+
+        // initialize row_length vector
       data_t row_length[NN];
-    row_length_initialization:  
-      for (index_t i = 0; i < NN; i++)
-      {
-#pragma HLS pipeline
-        row_length[i] = ARRAY2(rowPtr, iter, i + 1, NN + 1) - ARRAY2(rowPtr, iter, i, NN + 1);
-      }
 
-      // feed data into the fifos
-      // feed row index into fifo
-    row_length_fifo_initialization:  
-
-      for (index_t i = 0; i < NN; i++)
-      {
-#pragma HLS pipeline
-        row_length_fifo << row_length[i];
-      }
-    cols_values_fifo_initialization:
-      // feed column index and values into fifo
-      for (index_t i = 0; i < NNZ; i++)
-      {
-#pragma HLS pipeline
-        values_fifo << ARRAY2(values, iter, i, NNZ);
-        cols_fifo << ARRAY2(col_index, iter, i, NNZ);
-      }
-
-      /**
-       *  initialize the read parameters
-       */
-      data_t col_left;
-      data_t row_left;
-
-      data_t accumulator;
-      data_t value;
-      data_t col;
-
-      // read from fifo -> apply multiplication -> store value in local buffer -> write back
-    compute_loop:
-      for (index_t i = 0; i < NN; i++)
-      {
-#pragma HLS pipeline
-        // read parameters from fifos
-        // if (i == 0 || col_left == 0)
-        // {
-          col_left = row_length_fifo.read();
-          accumulator = 0;
-        // }
-      col_left_loop:
-        for (index_t j = 0; j < col_left;j++)
-        {
-          value = values_fifo.read();
-          col = cols_fifo.read();
-          accumulator += value * ARRAY2(x,iter,col,MM);
-
+      row_length_initialization:
+      for (index_t i = 0; i < NN; i++){
+        #pragma HLS pipeline
+            printf("generate row-length\n");
+            row_length[i] = ARRAY2(rowPtr, iter, i + 1, NN + 1) - ARRAY2(rowPtr, iter, i, NN + 1);
         }
-        results_fifo << accumulator;
-      }
-      // write back the accumulation to y vector
-    write_back_loop:
-      for (index_t j = 0; j < NN; j++)
-      {
-  #pragma HLS pipeline
-        data_t result = results_fifo.read();
-     //   printf("batch %d j %d current result %d\n",iter,j,result);    
-        ARRAY2(y, iter, j, NN) = result;
-      }
+
+      row_length_fifo_initialization:
+      for (index_t i = 0; i < NN; i++){
+        #pragma HLS pipeline
+          // printf("feed row length into fifo\n");
+          row_length_fifo << row_length[i];
+        }
+
+        // feed column index and values into fifo
+      cols_values_fifo_initialization:
+        for (index_t i = 0; i < NNZ; i++)
+            {
+      #pragma HLS pipeline
+            if(values_fifo.empty()){
+            printf("feed values into fifo: values_fifo empty\n");
+            }
+            printf("feed values into fifo\n");
+              values_fifo << ARRAY2(values, iter, i, NNZ);
+            // printf("feed cols into fifo\n");
+              cols_fifo << ARRAY2(col_index, iter, i, NNZ);
+            }
       
 
+        /**
+         *  initialize the read parameters
+         */
+        data_t col_left;
+        data_t row_left;
 
+        data_t accumulator;
+        data_t value;
+        data_t col;
+
+        // read from fifo -> apply multiplication -> store value in local buffer -> write back
+      compute_loop:
+        for (index_t i = 0; i < NN; i++)
+        {
+
+  #pragma HLS pipeline
+          // printf("read col_left from row-length\n");
+          if(values_fifo.empty()){
+            printf("compute_loop: values_fifo empty\n");
+          }
+          
+          
+            col_left = row_length_fifo.read();
+            accumulator = 0;
+        col_left_loop:
+          for (index_t j = 0; j < col_left;j++)
+          {
+          printf("read value from values fifo\n"); // used to suck here
+            value = values_fifo.read();
+          // printf("read colIndx from cols fifo\n");
+            col = cols_fifo.read();
+            
+            accumulator += value * ARRAY2(x,iter,col,MM);
+          }
+          printf("write accumulator into result fifo\n");
+          results_fifo << accumulator;
+        }
+        // write back the accumulation to y vector
+      write_back_loop:
+        for (index_t j = 0; j < NN; j++)
+        {
+    #pragma HLS pipeline
+          printf("read result result fifo\n");
+          data_t result = results_fifo.read();
+      //   printf("batch %d j %d current result %d\n",iter,j,result);    
+          ARRAY2(y, iter, j, NN) = result;
+        }
+      }
     }
-  }
 
 #ifdef __VITIS_CL__ // for lab 3
 } // extern
