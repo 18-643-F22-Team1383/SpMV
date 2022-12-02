@@ -6,27 +6,65 @@
 void spmv_run_kernel(cl_object &cl_obj, krnl_object &krnl_obj, uint64_t batch_size)
 {
   cl_int err;
-
+  uint64_t narg = 0;
+  // cl::Buffer *buffer_y;
   std::cout << "Running kernel for spmv..." << std::endl;
 
-  // Get i/o buffers from kernel object
+// I/O buffers for reduced kernel version
+// if(krnl_obj.name == "krnl_spmv_reduced"){
+//   cl::Buffer *buffer_values = &cl_obj.buffers[0];
+//   cl::Buffer *buffer_indices = &cl_obj.buffers[1];
+//   cl::Buffer *buffer_x = &cl_obj.buffers[2];
+//   buffer_y = &cl_obj.buffers[3];
+//   cl::Buffer *buffer_colIdx = &cl_obj.buffers[4];
+//   cl::Buffer *buffer_rowPtr = &cl_obj.buffers[5];
+// kernel argument counts for reduced kernel version
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_values));       // values
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_indices));      // indices
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_x));            // vector X
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_y));            // vector Y
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, (uint64_t)batch_size)); // batch size
+//   Data will be migrated to kernel space
+//   OCL_CHECK(err, err = cl_obj.q.enqueueMigrateMemObjects({*buffer_values, *buffer_indices, *buffer_x}, 0)); /* 0 means from host*/
+// }
+  
+// I/O buffers for fast kernel version
+// if(krnl_obj.name == "krnl_spmv_fast"){
+//   cl::Buffer *buffer_values = &cl_obj.buffers[0];
+//   cl::Buffer *buffer_colIdx = &cl_obj.buffers[1];
+//   cl::Buffer *buffer_rowPtr = &cl_obj.buffers[2];
+//   cl::Buffer *buffer_x = &cl_obj.buffers[3];
+//  buffer_y = &cl_obj.buffers[4];
+// // kernel argument counts for fast kernel version
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_values)); // values
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_colIdx));       // columnIndex
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_rowPtr));       // rowPtr
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_x));            // vector X
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_y));            // vector Y
+//   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, (uint64_t)batch_size)); // batch size
+//   // Data will be migrated to kernel space
+//   OCL_CHECK(err, err = cl_obj.q.enqueueMigrateMemObjects({*buffer_values, *buffer_colIdx, *buffer_rowPtr, *buffer_x}, 0 /* 0 means from host*/));
+
+// }
+
+
   cl::Buffer *buffer_values = &cl_obj.buffers[0];
   cl::Buffer *buffer_colIdx = &cl_obj.buffers[1];
   cl::Buffer *buffer_rowPtr = &cl_obj.buffers[2];
   cl::Buffer *buffer_x = &cl_obj.buffers[3];
   cl::Buffer *buffer_y = &cl_obj.buffers[4];
-
-  // Set the kernel Arguments
-  uint64_t narg = 0;
-  OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_values));       // values
+// kernel argument counts for fast kernel version
+// Set the kernel Arguments
+  OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_values)); // values
   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_colIdx));       // columnIndex
   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_rowPtr));       // rowPtr
   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_x));            // vector X
   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, *buffer_y));            // vector Y
   OCL_CHECK(err, err = cl_obj.krnl->setArg(narg++, (uint64_t)batch_size)); // batch size
-
   // Data will be migrated to kernel space
   OCL_CHECK(err, err = cl_obj.q.enqueueMigrateMemObjects({*buffer_values, *buffer_colIdx, *buffer_rowPtr, *buffer_x}, 0 /* 0 means from host*/));
+
+  std::cout << "Launch the Kernel" << std::endl;
 
   // Launch the Kernel; this is nonblocking.
   OCL_CHECK(err, err = cl_obj.q.enqueueTask(*cl_obj.krnl));
@@ -89,40 +127,40 @@ void initialize_sparse_matrix(data_t *rowPtr, data_t *colIdx, uint64_t batch_siz
 {
   for (uint64_t i = 0; i < batch_size; i++)
   {
-    bool martix[NN][NN];
-    for (int j = 0; j < NN; j++)
-      for (int k = 0; k < NN; k++)
-        martix[j][k] = false;
-    for (int j = 0; j < NNZ; j++)
-    {
-      bool placed = false;
-      while (!placed)
+      bool martix[NN][NN];
+      for (int j = 0; j < NN; j++)
+        for (int k = 0; k < NN; k++)
+          martix[j][k] = false;
+      for (int j = 0; j < NNZ; j++)
       {
-        int row = (rand() % NN);
-        int col = (rand() % NN);
-        if (!martix[row][col])
+        bool placed = false;
+        while (!placed)
         {
-          martix[row][col] = true;
-          placed = true;
+          int row = (rand() % NN);
+          int col = (rand() % NN);
+          if (!martix[row][col])
+          {
+            martix[row][col] = true;
+            placed = true;
+          }
         }
       }
-    }
-    int cnt = 0;
-    rowPtr[i * (NN + 1)] = cnt;
-    for (int j = 1; j < NN + 1; j++)
-    {
-      for (int k = 0; k < NN; k++)
+      int cnt = 0;
+      rowPtr[i * (NN + 1)] = cnt;
+      for (int j = 1; j < NN + 1; j++)
       {
-        if (martix[j - 1][k])
+        for (int k = 0; k < NN; k++)
         {
-         // printf("Cnt: %d, Col: %d\n", cnt, k);
-          colIdx[i * NNZ + cnt] = k;
-          cnt++;
+          if (martix[j - 1][k])
+          {
+            // printf("Cnt: %d, Col: %d\n", cnt, k);
+            colIdx[i * NNZ + cnt] = k;
+            cnt++;
+          }
         }
+        // printf("Row: %d, Pos: %d\n", j, cnt);
+        rowPtr[i * (NN + 1) + j] = cnt;
       }
-    //  printf("Row: %d, Pos: %d\n", j, cnt);
-      rowPtr[i * (NN + 1) + j] = cnt;
-    }
 
     // for (int j = 0; j < NN + 1; j++)
     // {
@@ -132,23 +170,6 @@ void initialize_sparse_matrix(data_t *rowPtr, data_t *colIdx, uint64_t batch_siz
     // {
     //   colIdx[i * NNZ + j] = (rand() % NN);
     // }
-    // for (int j = 0; j < NN + 1; j++)
-    //   printf("rowPtr %d: %d\n", (i * (NN + 1) + j), rowPtr[i * (NN + 1) + j]);
-    // for (int j = 0; j < NNZ; j++)
-    //   printf("colIdx %d: %d\n", (i * NNZ + j), colIdx[i * NNZ + j]);
-
-  //   printf("batch %d \n",i);
-  //   printf("rowPtr = [");
-
-  //  for (int j = 0; j < NN + 1; j++)
-  //     printf("%d,", rowPtr[i * (NN + 1) + j]);
-  //   printf("]\n");
-  //   printf("colIdx = [");
-  //   for (int j = 0; j < NNZ; j++)
-  //     printf("%d,",colIdx[i * NNZ + j]);
-  //   printf("]\n");
-  //   printf(" \n--- --- batch_end --- --- \n");
-
 
   }
 }
