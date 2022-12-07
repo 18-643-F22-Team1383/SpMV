@@ -20,22 +20,31 @@ int main(int argc, char *argv[])
   bool mismatch = false;
 
   data_t *ptr_values, *ptr_colIdx, *ptr_rowPtr, *ptr_x, *ptr_y;
-  data_t *ptr_indices;
   data_t *ref_values, *ref_colIdx, *ref_rowPtr, *ref_x, *ref_y;
+  // data_t *ptr_indices;
+  uintbuswidth_t *ptr_indices, *ptr_kernel_values, *ptr_kernel_y;
 
   // Compute the size of array in bytes
+  // uint64_t num_values = batch_size * NNZ;
+  // uint64_t num_colIdx = batch_size * NNZ;
+  // uint64_t num_rowPtr = batch_size * (NN + 1);
+  // uint64_t num_x = batch_size * MM;
+  // uint64_t num_y = batch_size * NN;
+  // uint64_t num_indices = batch_size * (NNZ + NN);
   uint64_t num_values = batch_size * NNZ;
   uint64_t num_colIdx = batch_size * NNZ;
   uint64_t num_rowPtr = batch_size * (NN + 1);
   uint64_t num_x = batch_size * MM;
   uint64_t num_y = batch_size * NN;
-  uint64_t num_indices = batch_size * (NNZ + NN);
+  uint64_t num_kernel_values = batch_size * (NNZ / MULTI_FACTOR);
+  uint64_t num_kernel_y = batch_size * (NN / MULTI_FACTOR);
+  uint64_t num_indices = batch_size * ((NNZ + NN) / MULTI_FACTOR);
 
   cl_object cl_obj;
 
   krnl_object spmv_obj;
   spmv_obj.index = 0;
-  spmv_obj.name = "krnl_spmv_reduced";
+  spmv_obj.name = "krnl_spmv_multi";
 
 #ifdef __VITIS_CL__
   std::cout << "===== Initialize device ======" << std::endl;
@@ -51,6 +60,7 @@ int main(int argc, char *argv[])
 
   std::cout << "\n===== Allocating buffers ======" << std::endl;
   uint64_t buf_idx = 0;
+  // Fast
   // allocate_readonly_mem(cl_obj, (void **)&ptr_values, buf_idx++,
   //                       num_values * sizeof(data_t));
   // allocate_readonly_mem(cl_obj, (void **)&ptr_colIdx, buf_idx++,
@@ -62,18 +72,37 @@ int main(int argc, char *argv[])
   // allocate_readonly_mem(cl_obj, (void **)&ptr_y, buf_idx++,
   //                       num_y * sizeof(data_t));
 
-  allocate_readonly_mem(cl_obj, (void **)&ptr_values, buf_idx++,
-                        num_values * sizeof(data_t));
+  // Reduced
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_values, buf_idx++,
+  //                       num_values * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_indices, buf_idx++,
+  //                       num_indices * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_x, buf_idx++,
+  //                       num_x * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_y, buf_idx++,
+  //                       num_y * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_colIdx, buf_idx++,
+  //                       num_colIdx * sizeof(data_t));
+  // allocate_readonly_mem(cl_obj, (void **)&ptr_rowPtr, buf_idx++,
+  //                       num_rowPtr * sizeof(data_t));
+
+  // Multi
+  allocate_readonly_mem(cl_obj, (void **)&ptr_kernel_values, buf_idx++,
+                        num_kernel_values * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_indices, buf_idx++,
                         num_indices * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_x, buf_idx++,
                         num_x * sizeof(data_t));
-  allocate_readonly_mem(cl_obj, (void **)&ptr_y, buf_idx++,
-                        num_y * sizeof(data_t));
+  allocate_readonly_mem(cl_obj, (void **)&ptr_kernel_y, buf_idx++,
+                        num_kernel_y * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_colIdx, buf_idx++,
                         num_colIdx * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_rowPtr, buf_idx++,
                         num_rowPtr * sizeof(data_t));
+  allocate_readonly_mem(cl_obj, (void **)&ptr_y, buf_idx++,
+                        num_y * sizeof(data_t));
+  allocate_readonly_mem(cl_obj, (void **)&ptr_values, buf_idx++,
+                        num_values * sizeof(data_t));
 
   MALLOC_CHECK(ref_values = new data_t[num_values]);
   MALLOC_CHECK(ref_colIdx = new data_t[num_colIdx]);
@@ -86,30 +115,106 @@ int main(int argc, char *argv[])
   initialize_buffer(ref_values, num_values, true);
   initialize_buffer(ref_x, num_x, true);
 
+  // Reduced
+  // uint32_t col_left = 0;
+  // uint32_t row_index = 0;
+  // uint32_t row_batch = 0;
+  // uint32_t col_index = 0;
+  // for (uint32_t i = 0; i < num_indices; i++)
+  // {
+  //   if (col_left == 0)
+  //   {
+  //     col_left = ref_rowPtr[(NN + 1) * row_batch + row_index + 1] - ref_rowPtr[(NN + 1) * row_batch + row_index];
+  //     // printf("Indices %d: row index: %d\n", i, col_left);
+  //     ptr_indices[i] = col_left;
+  //     row_index++;
+  //     if (row_index == NN)
+  //     {
+  //       row_index = 0;
+  //       row_batch++;
+  //     }
+  //   }
+  //   else
+  //   {
+  //     // printf("Indices %d: col index: %d\n", i, ref_colIdx[col_index]);
+  //     ptr_indices[i] = ref_colIdx[col_index];
+  //     col_index++;
+  //     col_left--;
+  //   }
+  // }
+
+  // Multi
   uint32_t col_left = 0;
   uint32_t row_index = 0;
   uint32_t row_batch = 0;
   uint32_t col_index = 0;
   for (uint32_t i = 0; i < num_indices; i++)
   {
-    if (col_left == 0)
+    for (uint32_t j = 0; j < num_indices; j++)
     {
-      col_left = ref_rowPtr[(NN + 1) * row_batch + row_index + 1] - ref_rowPtr[(NN + 1) * row_batch + row_index];
-      // printf("Indices %d: row index: %d\n", i, col_left);
-      ptr_indices[i] = col_left;
-      row_index++;
-      if (row_index == NN)
+      if (i == 0)
       {
-        row_index = 0;
-        row_batch++;
+        if (col_left == 0)
+        {
+          col_left = ref_rowPtr[(NN + 1) * row_batch + row_index + 1] - ref_rowPtr[(NN + 1) * row_batch + row_index];
+          // printf("Indices %d: row index: %d\n", i, col_left);
+          ptr_indices[j] = (uintbuswidth_t)col_left;
+          row_index++;
+          if (row_index == NN)
+          {
+            row_index = 0;
+            row_batch++;
+          }
+        }
+        else
+        {
+          // printf("Indices %d: col index: %d\n", i, ref_colIdx[col_index]);
+          ptr_indices[j] = (uintbuswidth_t)ref_colIdx[col_index];
+          col_index++;
+          col_left--;
+        }
+      }
+      else
+      {
+        if (col_left == 0)
+        {
+          col_left = ref_rowPtr[(NN + 1) * row_batch + row_index + 1] - ref_rowPtr[(NN + 1) * row_batch + row_index];
+          // printf("Indices %d: row index: %d\n", i, col_left);
+          ptr_indices[j] = ptr_indices[j] | (uintbuswidth_t)col_left << (DATA_WIDTH * i);
+          row_index++;
+          if (row_index == NN)
+          {
+            row_index = 0;
+            row_batch++;
+          }
+        }
+        else
+        {
+          // printf("Indices %d: col index: %d\n", i, ref_colIdx[col_index]);
+          ptr_indices[j] = ptr_indices[j] | (uintbuswidth_t)ref_colIdx[col_index] << (DATA_WIDTH * i);
+          col_index++;
+          col_left--;
+        }
       }
     }
-    else
+  }
+
+  // Multi
+  uint32_t value_index = 0;
+  for (uint32_t i = 0; i < num_kernel_values; i++)
+  {
+    for (uint32_t j = 0; j < num_kernel_values; j++)
     {
-      // printf("Indices %d: col index: %d\n", i, ref_colIdx[col_index]);
-      ptr_indices[i] = ref_colIdx[col_index];
-      col_index++;
-      col_left--;
+      if (i == 0)
+      {
+        ptr_kernel_values[j] = (uintbuswidth_t)ptr_values[value_index];
+        value_index++;
+      }
+      else
+      {
+        ptr_kernel_values[j] = ptr_kernel_values[j] | (uintbuswidth_t)ptr_values[value_index] << (DATA_WIDTH * i);
+        value_index++;
+      }
     }
   }
 
@@ -142,6 +247,16 @@ int main(int argc, char *argv[])
   std::cout << "Execution and Timing finished!\n"
             << std::endl;
 
+  // Multi
+  uint32_t y_index = 0;
+  for (uint32_t i = 0; i < num_kernel_y; i++)
+  {
+    for (uint32_t j = 0; j < num_kernel_y; j++)
+    {
+      ptr_y[y_index] = (data_t)(ptr_kernel_y[j] >> (DATA_WIDTH * i));
+      y_index++;
+    }
+  }
   if (enable_verify)
   {
     std::cout << "===== Verification starts ======" << std::endl;
@@ -157,11 +272,30 @@ int main(int argc, char *argv[])
   delete[] ref_x;
   delete[] ref_y;
 
-  deallocate_mem(cl_obj, ptr_values, 0);
-  deallocate_mem(cl_obj, ptr_colIdx, 1);
-  deallocate_mem(cl_obj, ptr_rowPtr, 2);
-  deallocate_mem(cl_obj, ptr_x, 3);
-  deallocate_mem(cl_obj, ptr_y, 4);
+  // Fast
+  // deallocate_mem(cl_obj, ptr_values, 0);
+  // deallocate_mem(cl_obj, ptr_colIdx, 1);
+  // deallocate_mem(cl_obj, ptr_rowPtr, 2);
+  // deallocate_mem(cl_obj, ptr_x, 3);
+  // deallocate_mem(cl_obj, ptr_y, 4);
+
+  // Reduced
+  // deallocate_mem(cl_obj, ptr_values, 0);
+  // deallocate_mem(cl_obj, ptr_indices, 1);
+  // deallocate_mem(cl_obj, ptr_x, 2);
+  // deallocate_mem(cl_obj, ptr_y, 3);
+  // deallocate_mem(cl_obj, ptr_colIdx, 4);
+  // deallocate_mem(cl_obj, ptr_rowPtr, 5);
+
+  // Reduced
+  deallocate_mem(cl_obj, ptr_kernel_values, 0);
+  deallocate_mem(cl_obj, ptr_indices, 1);
+  deallocate_mem(cl_obj, ptr_x, 2);
+  deallocate_mem(cl_obj, ptr_kernel_y, 3);
+  deallocate_mem(cl_obj, ptr_colIdx, 4);
+  deallocate_mem(cl_obj, ptr_rowPtr, 5);
+  deallocate_mem(cl_obj, ptr_y, 6);
+  deallocate_mem(cl_obj, ptr_values, 7);
 
   std::cout << "===== Reporting measured throughput ======" << std::endl;
   float timeusec = (end_time.tv_sec - start_time.tv_sec) * 1e6 + (end_time.tv_usec - start_time.tv_usec);

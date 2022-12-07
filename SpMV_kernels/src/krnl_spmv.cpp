@@ -1,5 +1,4 @@
 #include "krnl_spmv.h"
-#include <ap_int.h>
 #include <hls_stream.h>
 
 // #ifdef __VITIS_CL__
@@ -49,33 +48,17 @@ extern "C"
   {
     // initialize the fifos and data stream
     // defines all the fifos
-    // hls::stream<data_t, indices_fifo_depth> indices_fifo;
-    // #pragma HLS STREAM variable = indices_fifo depth = indices_fifo_depth type = fifo
-
-    // hls::stream<data_t, rows_fifo_depth> rows_fifo;
-    // #pragma HLS STREAM variable = rows_fifo depth = rows_fifo_depth type = fifo
-
-    // hls::stream<data_t, values_fifo_depth> values_fifo;
-    // #pragma HLS STREAM variable = values_fifo depth = values_fifo_depth type = fifo
-
-    // hls::stream<data_t, cols_fifo_depth> cols_fifo;
-    // #pragma HLS STREAM variable = cols_fifo depth = cols_fifo_depth type = fifo
-
-    // hls::stream<data_t, results_fifo_depth> results_fifo;
-    // #pragma HLS STREAM variable = results_fifo depth = results_fifo_depth type = fifo
-
-// batch_size iteration
-#pragma HLS interface mode = m_axi port = values bundle = gmem
+#pragma HLS interface mode = m_axi port = values bundle = gmem1
 #pragma HLS interface mode = m_axi port = indices bundle = gmem0
-#pragma HLS interface mode = m_axi port = x bundle = gmem1
+#pragma HLS interface mode = m_axi port = x bundle = gmem
 #pragma HLS interface mode = m_axi port = y bundle = gmem
 
+    // batch_size iteration
     for (uint64_t iter = 0; iter < batch_size; iter++)
     {
       //#pragma HLS pipeline off
 
 #pragma HLS DATAFLOW
-
       const data_t indices_fifo_depth = 2;
       const data_t rows_fifo_depth = 2;
       const data_t values_fifo_depth = 2;
@@ -94,6 +77,232 @@ extern "C"
       krnl_spmv_reduced_split(indices_fifo, rows_fifo, cols_fifo);
       krnl_spmv_reduced_MAC(iter, x, rows_fifo, cols_fifo, values_fifo, results_fifo);
       krnl_spmv_reduced_write(iter, y, results_fifo);
+    }
+  }
+
+  /**
+   * @default: sparse matrix has (n) rows and (m) columns totoally (NNZ) non-zero elements
+   * @param:  valeus: all the non-zero values extracted from input sparse matrix
+   *          col_indx: all the non-zero values corresponding column index, len(col_index) = NNZ
+   *          rowPtr: row pointer stores accumulative non-zero values before current row, len(rowPtr) = n + 1
+   *          row_length: num of non-zero elements of each row. row_length[i] = rowPtr[i+1] - rowPtr[i]. len(row_length) = n
+   *          x: dense vector, len(x) = n
+   *          y: output vector, len(y) = n
+   *          NNZ: non-zero elements of input sparse matrix, also is the size of input values[]
+   *          NN: num of rows of input sparse matrix. NN = n
+   * @summary: reduced port stream SpMV kernel
+   */
+  void krnl_spmv_multi(const uintbuswidth_t *values, const uintbuswidth_t *indices,
+                       const data_t *x, uintbuswidth_t *y, uint64_t batch_size)
+  {
+    // initialize the fifos and data stream
+    // defines all the fifos
+#pragma HLS interface mode = m_axi port = values bundle = gmem1
+#pragma HLS interface mode = m_axi port = indices bundle = gmem0
+#pragma HLS interface mode = m_axi port = x bundle = gmem
+#pragma HLS interface mode = m_axi port = y bundle = gmem
+
+    data_t x_tmp_0[MM], x_tmp_1[MM], x_tmp_2[MM], x_tmp_3[MM];
+    // batch_size iteration
+    for (uint64_t iter = 0; iter < batch_size; iter++)
+    {
+      // Load local X
+      for (index_t i = 0; i < MM; i++)
+      {
+#pragma HLS unroll factor = 16
+        data_t tmp = ARRAY2(x, iter, i, MM);
+        x_tmp_0[i] = tmp;
+        x_tmp_1[i] = tmp;
+        x_tmp_2[i] = tmp;
+        x_tmp_3[i] = tmp;
+      }
+
+      krnl_spmv_multi_dataflow(iter, values, indices, x_tmp_0, x_tmp_1, x_tmp_2, x_tmp_3, y);
+    }
+  }
+
+  void krnl_spmv_multi_dataflow(uint64_t iter, const uintbuswidth_t *values, const uintbuswidth_t *indices, data_t *x_tmp_0, data_t *x_tmp_1, data_t *x_tmp_2, data_t *x_tmp_3, uintbuswidth_t *y)
+  {
+#pragma HLS DATAFLOW
+    const data_t indices_fifo_depth = 2;
+    const data_t x_fifo_depth = 2;
+    const data_t rows_fifo_depth = 2;
+    const data_t values_fifo_depth = 2;
+    const data_t cols_fifo_depth = 2;
+    const data_t results_fifo_depth = 2;
+
+    data_t indices_fifo_0[(NNZ + NN) / MULTI_FACTOR],
+        rows_fifo_0[NN / MULTI_FACTOR],
+        values_fifo_0[NNZ / MULTI_FACTOR],
+        cols_fifo_0[NNZ / MULTI_FACTOR],
+        results_fifo_0[NN / MULTI_FACTOR];
+#pragma HLS STREAM variable = indices_fifo_0 depth = indices_fifo_depth type = fifo
+#pragma HLS STREAM variable = rows_fifo_0 depth = rows_fifo_depth type = fifo
+#pragma HLS STREAM variable = values_fifo_0 depth = values_fifo_depth type = fifo
+#pragma HLS STREAM variable = cols_fifo_0 depth = cols_fifo_depth type = fifo
+#pragma HLS STREAM variable = results_fifo_0 depth = results_fifo_depth type = fifo
+
+    data_t indices_fifo_1[(NNZ + NN) / MULTI_FACTOR],
+        rows_fifo_1[NN / MULTI_FACTOR],
+        values_fifo_1[NNZ / MULTI_FACTOR],
+        cols_fifo_1[NNZ / MULTI_FACTOR],
+        results_fifo_1[NN / MULTI_FACTOR];
+#pragma HLS STREAM variable = indices_fifo_1 depth = indices_fifo_depth type = fifo
+#pragma HLS STREAM variable = rows_fifo_1 depth = rows_fifo_depth type = fifo
+#pragma HLS STREAM variable = values_fifo_1 depth = values_fifo_depth type = fifo
+#pragma HLS STREAM variable = cols_fifo_1 depth = cols_fifo_depth type = fifo
+#pragma HLS STREAM variable = results_fifo_1 depth = results_fifo_depth type = fifo
+
+    data_t indices_fifo_2[(NNZ + NN) / MULTI_FACTOR],
+        rows_fifo_2[NN / MULTI_FACTOR],
+        values_fifo_2[NNZ / MULTI_FACTOR],
+        cols_fifo_2[NNZ / MULTI_FACTOR],
+        results_fifo_2[NN / MULTI_FACTOR];
+#pragma HLS STREAM variable = indices_fifo_2 depth = indices_fifo_depth type = fifo
+#pragma HLS STREAM variable = rows_fifo_2 depth = rows_fifo_depth type = fifo
+#pragma HLS STREAM variable = values_fifo_2 depth = values_fifo_depth type = fifo
+#pragma HLS STREAM variable = cols_fifo_2 depth = cols_fifo_depth type = fifo
+#pragma HLS STREAM variable = results_fifo_2 depth = results_fifo_depth type = fifo
+
+    data_t indices_fifo_3[(NNZ + NN) / MULTI_FACTOR],
+        rows_fifo_3[NN / MULTI_FACTOR],
+        values_fifo_3[NNZ / MULTI_FACTOR],
+        cols_fifo_3[NNZ / MULTI_FACTOR],
+        results_fifo_3[NN / MULTI_FACTOR];
+#pragma HLS STREAM variable = indices_fifo_3 depth = indices_fifo_depth type = fifo
+#pragma HLS STREAM variable = rows_fifo_3 depth = rows_fifo_depth type = fifo
+#pragma HLS STREAM variable = values_fifo_3 depth = values_fifo_depth type = fifo
+#pragma HLS STREAM variable = cols_fifo_3 depth = cols_fifo_depth type = fifo
+#pragma HLS STREAM variable = results_fifo_3 depth = results_fifo_depth type = fifo
+
+    krnl_spmv_multi_load(iter, indices, indices_fifo_0, indices_fifo_1, indices_fifo_2, indices_fifo_3);
+    krnl_spmv_multi_values(iter, values, values_fifo_0, values_fifo_1, values_fifo_2, values_fifo_3);
+
+    krnl_spmv_multi_split(indices_fifo_0, rows_fifo_0, cols_fifo_0);
+    krnl_spmv_multi_split(indices_fifo_1, rows_fifo_1, cols_fifo_1);
+    krnl_spmv_multi_split(indices_fifo_2, rows_fifo_2, cols_fifo_2);
+    krnl_spmv_multi_split(indices_fifo_3, rows_fifo_3, cols_fifo_3);
+    krnl_spmv_multi_MAC(iter, x_tmp_0, rows_fifo_0, cols_fifo_0, values_fifo_0, results_fifo_0);
+    krnl_spmv_multi_MAC(iter, x_tmp_1, rows_fifo_1, cols_fifo_1, values_fifo_1, results_fifo_1);
+    krnl_spmv_multi_MAC(iter, x_tmp_2, rows_fifo_2, cols_fifo_2, values_fifo_2, results_fifo_2);
+    krnl_spmv_multi_MAC(iter, x_tmp_3, rows_fifo_3, cols_fifo_3, values_fifo_3, results_fifo_3);
+
+    krnl_spmv_multi_write(iter, y, results_fifo_0, results_fifo_1, results_fifo_2, results_fifo_3);
+  }
+
+  void krnl_spmv_multi_load(uint64_t iter, const uintbuswidth_t *indices, data_t *indices_fifo_0, data_t *indices_fifo_1, data_t *indices_fifo_2, data_t *indices_fifo_3)
+  {
+#pragma HLS inline off
+    for (index_t i = 0; i < (NNZ + NN) / MULTI_FACTOR; i++)
+    {
+#pragma HLS pipeline
+      uintbuswidth_t idx = ARRAY2(indices, iter, i, (NNZ + NN) / MULTI_FACTOR);
+      indices_fifo_0[i] = (data_t)idx;
+      indices_fifo_1[i] = (data_t)(idx >> DATA_WIDTH);
+      indices_fifo_2[i] = (data_t)(idx >> (DATA_WIDTH * 2));
+      indices_fifo_3[i] = (data_t)(idx >> (DATA_WIDTH * 3));
+    }
+  }
+
+  void krnl_spmv_multi_values(uint64_t iter, const uintbuswidth_t *values, data_t *values_fifo_0, data_t *values_fifo_1, data_t *values_fifo_2, data_t *values_fifo_3)
+  {
+#pragma HLS inline off
+    for (index_t i = 0; i < NNZ / MULTI_FACTOR; i++)
+    {
+#pragma HLS pipeline
+      uintbuswidth_t value = ARRAY2(values, iter, i, NNZ / MULTI_FACTOR);
+      values_fifo_0[i] = (data_t)value;
+      values_fifo_1[i] = (data_t)(value >> DATA_WIDTH);
+      values_fifo_2[i] = (data_t)(value >> (DATA_WIDTH * 2));
+      values_fifo_3[i] = (data_t)(value >> (DATA_WIDTH * 3));
+    }
+  }
+
+  void krnl_spmv_multi_split(data_t *indices_fifo, data_t *rows_fifo, data_t *cols_fifo)
+  {
+#pragma HLS inline off
+    data_t col_left = 0;
+    data_t rows_idx = 0;
+    data_t cols_idx = 0;
+    // feed data into the fifos
+    // feed row index into fifo
+    for (index_t i = 0; i < (NNZ + NN) / MULTI_FACTOR; i++)
+    {
+#pragma HLS PIPELINE
+      data_t index = indices_fifo[i];
+      if (col_left == 0)
+      {
+        col_left = index;
+        rows_fifo[rows_idx] = col_left;
+        rows_idx++;
+      }
+      else
+      {
+        cols_fifo[cols_idx] = index;
+        col_left--;
+        cols_idx++;
+      }
+    }
+  }
+
+  void krnl_spmv_multi_MAC(uint64_t iter, data_t *x_tmp, data_t *rows_fifo, data_t *cols_fifo, data_t *values_fifo, data_t *results_fifo)
+  {
+#pragma HLS inline off
+    /**
+     *  initialize the read parameters
+     */
+    data_t col_left = 0;
+    data_t rows_idx = 0;
+    data_t cols_idx = 0;
+    data_t values_idx = 0;
+    data_t accumulator;
+    data_t value;
+    data_t col;
+    data_t x;
+
+    for (index_t i = 0; i < (NNZ + NN) / MULTI_FACTOR; i++)
+    {
+#pragma HLS pipeline
+      // read parameters from fifos
+      if (i == 0 || col_left == 0)
+      {
+        col_left = rows_fifo[rows_idx];
+        accumulator = 0;
+        rows_idx++;
+      }
+      else
+      {
+        // multiply and accumulate
+        value = values_fifo[cols_idx];
+        col = cols_fifo[cols_idx];
+        x = x_tmp[col];
+        cols_idx++;
+        accumulator += value * x;
+
+        col_left--;
+        // write back the dot product to fifo
+      }
+      if (col_left == 0)
+      {
+        results_fifo[values_idx] = accumulator;
+        values_idx++;
+      }
+    }
+  }
+
+  void krnl_spmv_multi_write(uint64_t iter, uintbuswidth_t *y, data_t *results_fifo_0, data_t *results_fifo_1, data_t *results_fifo_2, data_t *results_fifo_3)
+  {
+#pragma HLS inline off
+    // write back the accumulation to y vector
+    for (index_t i = 0; i < NN / MULTI_FACTOR; i++)
+    {
+#pragma HLS pipeline
+      uintbuswidth_t result = (uintbuswidth_t)results_fifo_3[i] << (DATA_WIDTH * 3) |
+                              (uintbuswidth_t)results_fifo_2[i] << (DATA_WIDTH * 2) |
+                              (uintbuswidth_t)results_fifo_1[i] << (DATA_WIDTH * 1) |
+                              (uintbuswidth_t)results_fifo_0[i];
+
+      ARRAY2(y, iter, i, NN / MULTI_FACTOR) = result;
     }
   }
 

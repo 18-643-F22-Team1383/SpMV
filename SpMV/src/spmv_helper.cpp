@@ -105,24 +105,30 @@ void initialize_sparse_matrix(data_t *rowPtr, data_t *colIdx, uint64_t batch_siz
 {
   for (uint64_t i = 0; i < batch_size; i++)
   {
+    // Multi Random
     bool martix[NN][NN];
     for (int j = 0; j < NN; j++)
       for (int k = 0; k < NN; k++)
         martix[j][k] = false;
-    for (int j = 0; j < NNZ; j++)
+
+    for (int k = 0; k < MULTI_FACTOR; k++)
     {
-      bool placed = false;
-      while (!placed)
+      for (int j = 0; j < NNZ / MULTI_FACTOR; j++)
       {
-        int row = (rand() % NN);
-        int col = (rand() % NN);
-        if (!martix[row][col])
+        bool placed = false;
+        while (!placed)
         {
-          martix[row][col] = true;
-          placed = true;
+          int row = (rand() % (NN / MULTI_FACTOR));
+          int col = (rand() % NN);
+          if (!martix[K * NN + row][col])
+          {
+            martix[K * NN + row][col] = true;
+            placed = true;
+          }
         }
       }
     }
+
     int cnt = 0;
     rowPtr[i * (NN + 1)] = cnt;
     for (int j = 1; j < NN + 1; j++)
@@ -140,6 +146,43 @@ void initialize_sparse_matrix(data_t *rowPtr, data_t *colIdx, uint64_t batch_siz
       rowPtr[i * (NN + 1) + j] = cnt;
     }
 
+    // Fully Random
+    // bool martix[NN][NN];
+    // for (int j = 0; j < NN; j++)
+    //   for (int k = 0; k < NN; k++)
+    //     martix[j][k] = false;
+    // for (int j = 0; j < NNZ; j++)
+    // {
+    //   bool placed = false;
+    //   while (!placed)
+    //   {
+    //     int row = (rand() % NN);
+    //     int col = (rand() % NN);
+    //     if (!martix[row][col])
+    //     {
+    //       martix[row][col] = true;
+    //       placed = true;
+    //     }
+    //   }
+    // }
+    // int cnt = 0;
+    // rowPtr[i * (NN + 1)] = cnt;
+    // for (int j = 1; j < NN + 1; j++)
+    // {
+    //   for (int k = 0; k < NN; k++)
+    //   {
+    //     if (martix[j - 1][k])
+    //     {
+    //       // printf("Cnt: %d, Col: %d\n", cnt, k);
+    //       colIdx[i * NNZ + cnt] = k;
+    //       cnt++;
+    //     }
+    //   }
+    //   // printf("Row: %d, Pos: %d\n", j, cnt);
+    //   rowPtr[i * (NN + 1) + j] = cnt;
+    // }
+
+    // One on each row
     // for (int j = 0; j < NN + 1; j++)
     // {
     //   rowPtr[i * (NN + 1) + j] = j;
