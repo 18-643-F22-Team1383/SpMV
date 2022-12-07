@@ -88,13 +88,13 @@ int main(int argc, char *argv[])
 
   // Multi
   allocate_readonly_mem(cl_obj, (void **)&ptr_kernel_values, buf_idx++,
-                        num_kernel_values * sizeof(data_t));
+                        num_kernel_values * sizeof(uintbuswidth_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_indices, buf_idx++,
-                        num_indices * sizeof(data_t));
+                        num_indices * sizeof(uintbuswidth_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_x, buf_idx++,
                         num_x * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_kernel_y, buf_idx++,
-                        num_kernel_y * sizeof(data_t));
+                        num_kernel_y * sizeof(uintbuswidth_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_colIdx, buf_idx++,
                         num_colIdx * sizeof(data_t));
   allocate_readonly_mem(cl_obj, (void **)&ptr_rowPtr, buf_idx++,
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
   uint32_t row_index = 0;
   uint32_t row_batch = 0;
   uint32_t col_index = 0;
-  for (uint32_t i = 0; i < num_indices; i++)
+  for (uint32_t i = 0; i < MULTI_FACTOR; i++)
   {
     for (uint32_t j = 0; j < num_indices; j++)
     {
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
         {
           col_left = ref_rowPtr[(NN + 1) * row_batch + row_index + 1] - ref_rowPtr[(NN + 1) * row_batch + row_index];
           // printf("Indices %d: row index: %d\n", i, col_left);
-          ptr_indices[j] = ptr_indices[j] | (uintbuswidth_t)col_left << (DATA_WIDTH * i);
+          ptr_indices[j] = ptr_indices[j] | ((uintbuswidth_t)col_left << (DATA_WIDTH * i));
           row_index++;
           if (row_index == NN)
           {
@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
         else
         {
           // printf("Indices %d: col index: %d\n", i, ref_colIdx[col_index]);
-          ptr_indices[j] = ptr_indices[j] | (uintbuswidth_t)ref_colIdx[col_index] << (DATA_WIDTH * i);
+          ptr_indices[j] = ptr_indices[j] | ((uintbuswidth_t)ref_colIdx[col_index] << (DATA_WIDTH * i));
           col_index++;
           col_left--;
         }
@@ -199,20 +199,27 @@ int main(int argc, char *argv[])
     }
   }
 
+  // for (uint32_t i = 0; i < num_indices; i++)
+  // {
+  //   uintbuswidth_t idx = ptr_indices[i];
+  //   printf("Indices %d: \n\t 0: %d;\n\t 1: %d;\n\t 2: %d;\n\t 3: %d;\n", i,
+  //          (data_t)(ptr_indices[i]), (data_t)(ptr_indices[i] >> DATA_WIDTH), (data_t)(ptr_indices[i] >> DATA_WIDTH * 2), (data_t)(ptr_indices[i] >> DATA_WIDTH * 3));
+  // }
+
   // Multi
   uint32_t value_index = 0;
-  for (uint32_t i = 0; i < num_kernel_values; i++)
+  for (uint32_t i = 0; i < MULTI_FACTOR; i++)
   {
     for (uint32_t j = 0; j < num_kernel_values; j++)
     {
       if (i == 0)
       {
-        ptr_kernel_values[j] = (uintbuswidth_t)ptr_values[value_index];
+        ptr_kernel_values[j] = (uintbuswidth_t)ref_values[value_index];
         value_index++;
       }
       else
       {
-        ptr_kernel_values[j] = ptr_kernel_values[j] | (uintbuswidth_t)ptr_values[value_index] << (DATA_WIDTH * i);
+        ptr_kernel_values[j] = ptr_kernel_values[j] | ((uintbuswidth_t)ref_values[value_index] << (DATA_WIDTH * i));
         value_index++;
       }
     }
@@ -249,7 +256,7 @@ int main(int argc, char *argv[])
 
   // Multi
   uint32_t y_index = 0;
-  for (uint32_t i = 0; i < num_kernel_y; i++)
+  for (uint32_t i = 0; i < MULTI_FACTOR; i++)
   {
     for (uint32_t j = 0; j < num_kernel_y; j++)
     {
@@ -257,6 +264,14 @@ int main(int argc, char *argv[])
       y_index++;
     }
   }
+
+  // for (uint32_t i = 0; i < num_kernel_y; i++)
+  // {
+  //   uintbuswidth_t result = ptr_kernel_y[i];
+  //   printf("Result %d: \n\t 0: %d;\n\t 1: %d;\n\t 2: %d;\n\t 3: %d;\n", i,
+  //          (data_t)(ptr_kernel_y[i]), (data_t)(ptr_kernel_y[i] >> DATA_WIDTH), (data_t)(ptr_kernel_y[i] >> DATA_WIDTH * 2), (data_t)(ptr_kernel_y[i] >> DATA_WIDTH * 3));
+  // }
+
   if (enable_verify)
   {
     std::cout << "===== Verification starts ======" << std::endl;

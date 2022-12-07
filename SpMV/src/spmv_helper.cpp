@@ -120,9 +120,9 @@ void initialize_sparse_matrix(data_t *rowPtr, data_t *colIdx, uint64_t batch_siz
         {
           int row = (rand() % (NN / MULTI_FACTOR));
           int col = (rand() % NN);
-          if (!martix[K * NN + row][col])
+          if (!martix[k * NN / MULTI_FACTOR + row][col])
           {
-            martix[K * NN + row][col] = true;
+            martix[k * NN / MULTI_FACTOR + row][col] = true;
             placed = true;
           }
         }
