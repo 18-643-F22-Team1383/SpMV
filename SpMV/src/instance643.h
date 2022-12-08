@@ -12,8 +12,8 @@ typedef unsigned int data_t;
 
 static inline bool nearlyEqual(data_t a, data_t b) { return a == b; }
 
-#define NNZ 512 // Non-zero elements
+#define NNZ 512       // Non-zero elements
 
-#define MM 512 // Size of vector X
+#define MM 512         // Size of vector X
 
-#define NN 512 // Size of vector Y
+#define NN 512         // Size of vector Y

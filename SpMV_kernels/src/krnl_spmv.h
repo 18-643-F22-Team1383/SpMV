@@ -27,7 +27,8 @@ extern "C"
   void krnl_spmv_reduced_MAC(uint64_t iter, const data_t *x, data_t *rows_fifo, data_t *cols_fifo, data_t *values_fifo, data_t *results_fifo);
   void krnl_spmv_reduced_write(uint64_t iter, data_t *y, data_t *results_fifo);
 
-  void krnl_spmv_multi_dataflow(uint64_t iter, const uintbuswidth_t *values, const uintbuswidth_t *indices, data_t *x_tmp_0, data_t *x_tmp_1, data_t *x_tmp_2, data_t *x_tmp_3, uintbuswidth_t *y);
+  void krnl_spmv_multi_dataflow(uint64_t iter, const uintbuswidth_t *values, const uintbuswidth_t *indices,
+                                data_t *x_tmp_0, data_t *x_tmp_1, data_t *x_tmp_2, data_t *x_tmp_3, uintbuswidth_t *y);
   void krnl_spmv_multi_load(uint64_t iter, const uintbuswidth_t *indices, data_t *indices_fifo_0, data_t *indices_fifo_1, data_t *indices_fifo_2, data_t *indices_fifo_3);
   void krnl_spmv_multi_values(uint64_t iter, const uintbuswidth_t *values, data_t *values_fifo_0, data_t *values_fifo_1, data_t *values_fifo_2, data_t *values_fifo_3);
   void krnl_spmv_multi_split(data_t *indices_fifo, data_t *rows_fifo, data_t *cols_fifo);

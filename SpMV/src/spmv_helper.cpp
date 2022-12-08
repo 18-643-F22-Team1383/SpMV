@@ -191,8 +191,8 @@ void initialize_sparse_matrix(data_t *rowPtr, data_t *colIdx, uint64_t batch_siz
     // {
     //   colIdx[i * NNZ + j] = (rand() % NN);
     // }
-    // for (int j = 0; j < NN + 1; j++)
-    //   printf("rowPtr %d: %d\n", (i * (NN + 1) + j), rowPtr[i * (NN + 1) + j]);
+    // for (int j = 0; j < NN; j++)
+    //   printf("rowPtr %d: %d\n", (i * (NN + 1) + j), rowPtr[i * (NN + 1) + j + 1] - rowPtr[i * (NN + 1) + j]);
     // for (int j = 0; j < NNZ; j++)
     //   printf("colIdx %d: %d\n", (i * NNZ + j), colIdx[i * NNZ + j]);
   }
@@ -210,6 +210,7 @@ void initialize_buffer(data_t *ptr, unsigned size, bool notzero)
 void spmv_ref_code(data_t *values, data_t *colIdx, data_t *rowPtr,
                    data_t *x, data_t *y, uint64_t iter)
 {
+
   for (int i = 0; i < NN; i++)
   {
     data_t yt = 0;

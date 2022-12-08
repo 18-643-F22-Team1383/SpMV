@@ -113,7 +113,11 @@ int main(int argc, char *argv[])
   // Set randomized inputs in reference copy
   initialize_sparse_matrix(ref_rowPtr, ref_colIdx, batch_size);
   initialize_buffer(ref_values, num_values, true);
-  initialize_buffer(ref_x, num_x, true);
+  // initialize_buffer(ref_x, num_x, true);
+  for (int i = 0; i < num_x; i++)
+  {
+    ref_x[i] = i + 1;
+  }
 
   // Reduced
   // uint32_t col_left = 0;
